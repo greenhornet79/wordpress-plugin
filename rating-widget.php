@@ -294,6 +294,7 @@ Domain Path: /langs
 				
 				if ($this->fs->is_registered()) {
 					add_action('wp_ajax_rw-toprated-popup-html', array(&$this, 'generate_toprated_popup_html'));
+					add_action('wp_ajax_rw-affiliate-apply', array(&$this, 'send_affiliate_application'));
 					add_action('admin_init', array(&$this, 'register_toprated_shortcode_hooks'));
 				}
 				
@@ -315,6 +316,53 @@ Domain Path: /langs
 					// wp_footer call validation.
 					// add_action('init', array(&$this, 'test_footer_init'));
 				}
+			}
+			
+			/**
+			 * Sends an affiliate application to affiliate@rating-widget.com
+			 * 
+			 * @author Leo Fajardo (@leorw)
+			 */
+			function send_affiliate_application() {
+				// Continue only if the nonce is correct
+				check_admin_referer('rw_send_affiliate_application_nonce', '_n');
+				
+				$admin_email = get_option('admin_email');
+				$user = $this->fs->get_user();
+				$site = $this->fs->get_site();
+				
+				$posts_count = wp_count_posts('post');
+				$pages_count = wp_count_posts('page');
+				$total_posts = $posts_count->publish + $pages_count->publish;
+				
+				$blog_address = site_url();
+				$domain = $_SERVER['HTTP_HOST'];
+				
+				$comments_count = wp_count_comments();
+				$total_approved_comments = $comments_count->approved;
+				
+				$subject = "$domain wants to be an affiliate";
+				
+				$email_details = array(
+					'aff_admin_email' => $admin_email,
+					'aff_user_id' => $user->id,
+					'aff_site_id' => $site->id,
+					'aff_site_address' => $blog_address,
+					'aff_total_posts' => $total_posts,
+					'aff_total_comments' => $total_approved_comments
+				);
+				
+				// Retrieve the HTML email content
+				ob_start();
+				rw_require_view('email/affiliation_email.php', $email_details);
+				$message = ob_get_contents();
+				ob_end_clean();
+				
+				$header = 'Content-type: text/html';
+				wp_mail('affiliate@rating-widget.com', $subject, $message, $header);
+				
+				echo 1;
+				exit;
 			}
 			
 			/**
@@ -1388,7 +1436,7 @@ Domain Path: /langs
 				if ($this->admin_page_has_editor() && $this->fs->is_registered()) {
 					rw_enqueue_style('rw-toprated-shortcode-style', WP_RW__PLUGIN_URL . 'resources/css/toprated-shortcode.css');
 				}
-				
+					
 				if (!$this->_inDashboard)
 					return;
 
@@ -1444,6 +1492,11 @@ Domain Path: /langs
 						// Enqueue live preview JS and CSS
 						rw_enqueue_script('rw-js-live-preview', WP_RW__PLUGIN_URL . '/resources/js/live-preview.js');
 						rw_enqueue_style('rw-live-preview', WP_RW__PLUGIN_URL . 'resources/css/live-preview.css');
+					}
+					
+					if ('rating-widget-affiliation' === $_GET['page']) {
+						// Enqueue the affiliation page CSS
+						rw_enqueue_style('rw-affiliation-style', WP_RW__PLUGIN_URL . 'resources/css/affiliation.css');
 					}
 				}
 			}
@@ -1664,6 +1717,12 @@ Domain Path: /langs
 				$submenu[] = array(
 					'menu_title' => __('Advanced', WP_RW__ID),
 					'function' => 'AdvancedSettingsPageRender',
+				);
+
+				// Affiliation application page.
+				$submenu[] = array(
+					'menu_title' => __('Affiliation', WP_RW__ID),
+					'function' => 'affiliation_settings_page_render',
 				);
 
 				$this->fs->add_action('fs_after_account_details', array(&$this, 'AccountPageRender'));
@@ -2877,6 +2936,15 @@ Domain Path: /langs
 				// Store options if in save mode.
 				if ($this->settings->IsSaveMode())
 					$this->_options_manager->store();
+			}
+
+			/**
+			 * Generates the content of the Affiliation Program page
+			 * 
+			 * @author Leo Fajardo (@leorw)
+			 */
+			function affiliation_settings_page_render() {
+				rw_require_once_view('pages/admin/affiliation.php');
 			}
 
 			function TopRatedSettingsPageLoad()
